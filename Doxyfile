@@ -1,17 +1,17 @@
 # Doxyfile 1.13.2
 
-# This file describes the settings to be used by the documentation  system
+# This file describes the settings to be used by the documentation system
 # Doxygen (www.doxygen.org) for a project.
 #
-# All text after a double hash (##) is consid ered a comment and is placed in
+# All text after a double hash (##) is considered a comment and is placed in
 # front of the TAG it is preceding.
 #
-# All text after a single hash (#) is con sidered a comment and will be ignored.
+# All text after a single hash (#) is considered a comment and will be ignored.
 # The format is:
 # TAG = value [value, ...]
 # For lists, items can also be appended using:
 # TAG += value [value, ...]
-# Values that co ntain spaces should be placed between quotes (\" \").
+# Values that contain spaces should be placed between quotes (\" \").
 #
 # Note:
 #
@@ -74,7 +74,7 @@ PROJECT_ICON           =
 # entered, it will be relative to the location where Doxygen was started. If
 # left blank the current directory will be used.
 
-OUTPUT_DIRECTORY       = ./docs
+OUTPUT_DIRECTORY       = ./
 
 # If the CREATE_SUBDIRS tag is set to YES then Doxygen will create up to 4096
 # sub-directories (in 2 levels) under the output directory of each output format
@@ -85,7 +85,7 @@ OUTPUT_DIRECTORY       = ./docs
 # control the number of sub-directories.
 # The default value is: NO.
 
-CREATE_SUBDIRS         = YES
+CREATE_SUBDIRS         = NO
 
 # Controls the number of sub-directories that will be created when
 # CREATE_SUBDIRS tag is set to YES. Level 0 represents 16 directories, and every
@@ -1087,7 +1087,7 @@ FILE_PATTERNS          = *.c \
 # be searched for input files as well.
 # The default value is: NO.
 
-RECURSIVE              = NO
+RECURSIVE              = YES
 
 # The EXCLUDE tag can be used to specify files and/or directories that should be
 # excluded from the INPUT source files. This way you can easily exclude a
