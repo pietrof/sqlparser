@@ -2,36 +2,59 @@
 using System.Collections.Generic;
 using System.IO;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
+using static SqlProcAnalyzer;
 
 var analyzer = new SqlProcAnalyzer();
-var results = analyzer.AnalyzeDirectory(@"C:\Users\pietr\source\repos\sqlparsergpt\sql\");
+var results = analyzer.AnalyzeDirectory(@"..\..\..\..\sqlparser\sql\");
 
-foreach (var proc in results)
+foreach (AnalysisResult res in results)
 {
-    Console.WriteLine($"Stored Procedure: {proc.ProcedureName}");
-    Console.WriteLine("Tables:");
-    foreach (var table in proc.Tables)
-        Console.WriteLine($" - {table}");
+    if (res is ProcAnalysisResult proc)
+    {
+        Console.WriteLine($"Stored Procedure: {proc.ProcedureName}");
+        Console.WriteLine("Tables Used:");
+        foreach (var table in proc.Tables)
+            Console.WriteLine($" - {table}");
 
-    Console.WriteLine("Join Fields:");
-    foreach (var field in proc.JoinFields)
-        Console.WriteLine($" - {field}");
+        Console.WriteLine("Join Fields:");
+        foreach (var field in proc.JoinFields)
+            Console.WriteLine($" - {field}");
 
-    Console.WriteLine("Called Procedures:");
-    foreach (var calledProc in proc.CalledProcedures)
-        Console.WriteLine($" - {calledProc}");
+        Console.WriteLine("Called Procedures:");
+        foreach (var calledProc in proc.CalledProcedures)
+            Console.WriteLine($" - {calledProc}");
 
-    Console.WriteLine();
+        Console.WriteLine();
+    }
+
+    if (res is TableAnalysisResultt tab)
+    {
+        Console.WriteLine($"Table: {tab.TableName}");
+        Console.WriteLine("Fields:");
+        foreach (var table in tab.FieldNames)
+            Console.WriteLine($" - {table}");
+
+
+        Console.WriteLine();
+    }
 }
 
 class SqlProcAnalyzer
 {
-    public class ProcAnalysisResult
+    public class AnalysisResult
+    {
+    }
+    public class ProcAnalysisResult:AnalysisResult
     {
         public string ProcedureName { get; set; } = string.Empty;
         public HashSet<string> Tables { get; set; } = new();
         public HashSet<string> JoinFields { get; set; } = new();
         public HashSet<string> CalledProcedures { get; set; } = new();
+    }
+    public class TableAnalysisResultt : AnalysisResult
+    {
+        public string TableName { get; set; } = string.Empty;
+        public HashSet<string> FieldNames { get; set; } = new();
     }
     private class TableSchemaVisitor : TSqlFragmentVisitor
     {
@@ -56,11 +79,9 @@ class SqlProcAnalyzer
         }
     }
 
-    public List<ProcAnalysisResult> AnalyzeDirectory(string path)
+    public List<AnalysisResult> AnalyzeDirectory(string path)
     {
-        var results = new List<ProcAnalysisResult>();
-
-        var tableSchemas = new Dictionary<string, List<string>>();
+        var results = new List<AnalysisResult>();
 
         foreach (var file in Directory.GetFiles(path, "*.sql"))
         {
@@ -79,12 +100,16 @@ class SqlProcAnalyzer
                 }
                 continue;
             }
-            // Extract table schemas
+            // Extract table schemas as TableAnalysisResultt
             var tableSchemaVisitor = new TableSchemaVisitor();
             fragment.Accept(tableSchemaVisitor);
             foreach (var kvp in tableSchemaVisitor.TableSchemas)
             {
-                tableSchemas[kvp.Key] = kvp.Value;
+                results.Add(new TableAnalysisResultt
+                {
+                    TableName = kvp.Key,
+                    FieldNames = new HashSet<string>(kvp.Value)
+                });
             }
 
             var visitor = new StoredProcedureVisitor();
@@ -101,16 +126,7 @@ class SqlProcAnalyzer
                 results.Add(analysis);
             }
         }
-        // Print table schemas
-        Console.WriteLine("Table Schemas:");
-        foreach (var kvp in tableSchemas)
-        {
-            Console.WriteLine($"Table: {kvp.Key}");
-            foreach (var column in kvp.Value)
-            {
-                Console.WriteLine($" - {column}");
-            }
-        }
+      
 
         return results;
     }
