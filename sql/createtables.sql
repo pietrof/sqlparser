@@ -18,6 +18,7 @@ CREATE TABLE Prices (
     HighPrice DECIMAL(18,4),
     LowPrice DECIMAL(18,4),
     Volume BIGINT,
+    CCY VARCHAR(50) NOT NULL,
     CONSTRAINT UQ_InstrumentDate UNIQUE (InstrumentID, PriceDate)
 );
 
@@ -27,6 +28,14 @@ CREATE TABLE Instruments (
 	Symbol VARCHAR(10) NOT NULL UNIQUE,
 	Name VARCHAR(100) NOT NULL,
 	Type VARCHAR(50) NOT NULL,
+	CreatedAt DATETIME DEFAULT GETDATE()
+);
+    go
+    CREATE TABLE FX (
+	
+	CCY VARCHAR(50) NOT NULL,
+    FXRateFromCHF DECIMAL(18,4),
+    
 	CreatedAt DATETIME DEFAULT GETDATE()
 );
     go

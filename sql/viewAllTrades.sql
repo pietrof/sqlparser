@@ -1,12 +1,7 @@
-﻿CREATE PROCEDURE GetTradeMarketValues
+﻿CREATE PROCEDURE gettradewithpricehistory
 AS
 BEGIN
-    -- Get the latest price per instrument
-    WITH LatestPrices AS (
-        SELECT p.InstrumentID, p.ClosePrice,
-               ROW_NUMBER() OVER (PARTITION BY p.InstrumentID ORDER BY p.PriceDate DESC) AS rn
-        FROM Prices p
-    )
+ 
     SELECT 
         t.TradeID,
         t.TradeDate,
@@ -17,9 +12,11 @@ BEGIN
         (t.Quantity * lp.ClosePrice) AS MarketValue,
         i.Symbol,
         i.Name,
-        t.Trader
+        t.Trader,
+        p.PriceDate AS PriceDate,
+        p.ClosePrice AS HistoricalClosePrice
     FROM Trades t
     JOIN Instruments i ON t.InstrumentID = i.InstrumentID
-    JOIN LatestPrices lp ON t.InstrumentID = lp.InstrumentID AND lp.rn = 1
+    JOIN Prices lp ON t.InstrumentID = lp.InstrumentID 
     ORDER BY t.TradeDate DESC;
 END;
