@@ -38,6 +38,7 @@
             panel2 = new Panel();
             label1 = new Label();
             button2 = new Button();
+            button3 = new Button();
             panel1.SuspendLayout();
             panel2.SuspendLayout();
             SuspendLayout();
@@ -47,9 +48,10 @@
             richTextBox1.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             richTextBox1.Location = new Point(12, 149);
             richTextBox1.Name = "richTextBox1";
-            richTextBox1.Size = new Size(866, 289);
+            richTextBox1.Size = new Size(1153, 289);
             richTextBox1.TabIndex = 0;
             richTextBox1.Text = "";
+            richTextBox1.TextChanged += richTextBox1_TextChanged;
             // 
             // button1
             // 
@@ -82,13 +84,14 @@
             cmbInputDestField.FormattingEnabled = true;
             cmbInputDestField.Location = new Point(14, 14);
             cmbInputDestField.Name = "cmbInputDestField";
-            cmbInputDestField.Size = new Size(182, 33);
+            cmbInputDestField.Size = new Size(450, 33);
             cmbInputDestField.TabIndex = 4;
+            cmbInputDestField.SelectedIndexChanged += cmbInputDestField_SelectedIndexChanged_1;
             // 
             // cmbInputDestTable
             // 
             cmbInputDestTable.FormattingEnabled = true;
-            cmbInputDestTable.Location = new Point(211, 14);
+            cmbInputDestTable.Location = new Point(511, 14);
             cmbInputDestTable.Name = "cmbInputDestTable";
             cmbInputDestTable.Size = new Size(182, 33);
             cmbInputDestTable.TabIndex = 5;
@@ -108,7 +111,7 @@
             panel2.Controls.Add(cmbInputDestTable);
             panel2.Location = new Point(476, 65);
             panel2.Name = "panel2";
-            panel2.Size = new Size(407, 59);
+            panel2.Size = new Size(700, 68);
             panel2.TabIndex = 7;
             // 
             // label1
@@ -130,11 +133,22 @@
             button2.UseVisualStyleBackColor = true;
             button2.Click += button2_Click;
             // 
+            // button3
+            // 
+            button3.Location = new Point(284, 13);
+            button3.Name = "button3";
+            button3.Size = new Size(137, 37);
+            button3.TabIndex = 10;
+            button3.Text = "Jump to file";
+            button3.UseVisualStyleBackColor = true;
+            button3.MouseClick += button3_MouseClick;
+            // 
             // Form1
             // 
             AutoScaleDimensions = new SizeF(10F, 25F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(891, 450);
+            ClientSize = new Size(1178, 450);
+            Controls.Add(button3);
             Controls.Add(button2);
             Controls.Add(label1);
             Controls.Add(panel2);
@@ -161,5 +175,6 @@
         private Panel panel2;
         private Label label1;
         private Button button2;
+        private Button button3;
     }
 }

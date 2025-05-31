@@ -1,7 +1,24 @@
 using Microsoft.SqlServer.TransactSql.ScriptDom;
+using System.Runtime.CompilerServices;
 
 namespace sqlparsergui
 {
+    public record FieldLocation(string FilePath, int LineNumber);
+    public static class SqlDomExtensions
+    {
+        public static string ToSqlOperator(this BinaryExpressionType type)
+        {
+            return type switch
+            {
+                BinaryExpressionType.Add => "+",
+                BinaryExpressionType.Subtract => "-",
+                BinaryExpressionType.Multiply => "*",
+                BinaryExpressionType.Divide => "/",
+                BinaryExpressionType.Modulo => "%",
+                _ => type.ToString()
+            };
+        }
+    }
     internal static class Program
     {
         /// <summary>
@@ -27,43 +44,50 @@ namespace sqlparsergui
             public HashSet<string> Tables { get; set; } = new();
             public HashSet<string> JoinFields { get; set; } = new();
             public HashSet<string> CalledProcedures { get; set; } = new();
+            public HashSet<string> WhereConditions { get; set; } = new(); // <-- Add this
+            public Dictionary<string, (string expr, HashSet<string> tables, FieldLocation location)> OutputFields { get; set; } = new();
+
+
         }
+
         public class TableAnalysisResultt : AnalysisResult
         {
             public string TableName { get; set; } = string.Empty;
             public HashSet<string> FieldNames { get; set; } = new();
+            public Dictionary<string, FieldLocation> FieldLocations { get; set; } = new();
         }
         private class TableSchemaVisitor : TSqlFragmentVisitor
         {
-            public Dictionary<string, List<string>> TableSchemas { get; } = new();
+            public string FilePath { get; set; } = "";
+            public Dictionary<string, FieldLocation> FieldLocations { get; } = new();
+
+            public Dictionary<string, List<string>> TableSchemas { get; } = new(); // <-- Add this
 
             public override void Visit(CreateTableStatement node)
             {
-                // Extract the table name
                 var tableName = node.SchemaObjectName.BaseIdentifier.Value;
-
-                // Extract the column names
                 var columns = new List<string>();
                 foreach (var column in node.Definition.ColumnDefinitions)
                 {
                     columns.Add(column.ColumnIdentifier.Value);
+                    FieldLocations[column.ColumnIdentifier.Value] = new FieldLocation(
+                        FilePath,
+                        column.StartLine
+                    );
                 }
-
-                // Store the table schema
                 TableSchemas[tableName] = columns;
-
                 base.Visit(node);
             }
         }
-
-        public List<AnalysisResult> AnalyzeDirectory(string path)
+        public List<AnalysisResult> AnalyzeDirectory(string path, Action<string> log)
         {
             var results = new List<AnalysisResult>();
 
             foreach (var file in Directory.GetFiles(path, "*.sql"))
             {
+                log("Processing file: " + file);    
                 string sqlText = File.ReadAllText(file);
-                var parser = new TSql150Parser(false); // Use the appropriate SQL Server version
+                var parser = new TSql150Parser(true); // Use the appropriate SQL Server version
                 IList<ParseError> errors;
 
                 var fragment = parser.Parse(new StringReader(sqlText), out errors);
@@ -73,12 +97,12 @@ namespace sqlparsergui
                     Console.WriteLine($"Parse errors in {file}:");
                     foreach (var error in errors)
                     {
-                        Console.WriteLine($" - {error.Message}");
+                        log($" - ({error.Line},{error.Column}):{error.Message}");
                     }
-                    continue;
+
                 }
                 // Extract table schemas as TableAnalysisResultt
-                var tableSchemaVisitor = new TableSchemaVisitor();
+                var tableSchemaVisitor = new TableSchemaVisitor { FilePath = file };
                 fragment.Accept(tableSchemaVisitor);
                 foreach (var kvp in tableSchemaVisitor.TableSchemas)
                 {
@@ -89,7 +113,7 @@ namespace sqlparsergui
                     });
                 }
 
-                var visitor = new StoredProcedureVisitor();
+                var visitor = new StoredProcedureVisitor() { FilePath = file };
                 fragment.Accept(visitor);
 
                 foreach (var proc in visitor.StoredProcedures)
@@ -99,7 +123,7 @@ namespace sqlparsergui
                         ProcedureName = proc.ProcedureName
                     };
 
-                    AnalyzeStatements(proc.Body, analysis);
+                    AnalyzeStatements(proc.Body, analysis,file);
                     results.Add(analysis);
                 }
             }
@@ -108,7 +132,91 @@ namespace sqlparsergui
             return results;
         }
 
-        private void AnalyzeStatements(TSqlFragment fragment, ProcAnalysisResult result)
+        private class OutputFieldsVisitor : TSqlFragmentVisitor
+        {
+
+            public string FilePath { get; set; } = "";
+            public Dictionary<string, (string expr, HashSet<string> tables, FieldLocation location)> OutputFields { get; set; } = new();
+            private readonly Dictionary<string, string> _tableAliases;
+
+            public OutputFieldsVisitor(Dictionary<string, string> tableAliases)
+            {
+                _tableAliases = tableAliases;
+            }
+
+            public override void Visit(SelectScalarExpression node)
+            {
+                string alias = node.ColumnName?.Value;
+                string expr = GetExpressionString(node.Expression);
+                var tables = new HashSet<string>();
+                CollectTables(node.Expression, tables);
+
+                if (!string.IsNullOrEmpty(alias))
+                {
+                    var location = new FieldLocation(
+                        FilePath,
+                        node.StartLine
+                    );
+                    OutputFields[alias] = (expr, tables, location);
+                }
+            }
+
+            private void CollectTables(ScalarExpression expr, HashSet<string> tables)
+            {
+                switch (expr)
+                {
+                    case ColumnReferenceExpression col:
+                        if (col.MultiPartIdentifier.Identifiers.Count > 1)
+                        {
+                            var alias = col.MultiPartIdentifier.Identifiers[0].Value;
+                            if (_tableAliases.TryGetValue(alias, out var realTable))
+                                tables.Add(realTable);
+                            else
+                                tables.Add(alias);
+                        }
+                        else
+                        {
+                            tables.Add(col.MultiPartIdentifier.Identifiers[0].Value);
+                        }
+                        break;
+                    case BinaryExpression bin:
+                        CollectTables(bin.FirstExpression, tables);
+                        CollectTables(bin.SecondExpression, tables);
+                        break;
+                    case ParenthesisExpression paren:
+                        CollectTables(paren.Expression, tables);
+                        break;
+                        // Add more cases as needed
+                }
+            }
+
+            private string GetExpressionString(ScalarExpression expr)
+            {
+                switch (expr)
+                {
+                    case ColumnReferenceExpression col:
+                        if (col.MultiPartIdentifier.Identifiers.Count == 2)
+                        {
+                            var alias = col.MultiPartIdentifier.Identifiers[0].Value;
+                            var colName = col.MultiPartIdentifier.Identifiers[1].Value;
+                            if (_tableAliases.TryGetValue(alias, out var realTable))
+                                return $"{realTable}.{colName}";
+                            else
+                                return $"{alias}.{colName}";
+                        }
+                        return string.Join(".", col.MultiPartIdentifier.Identifiers.Select(i => i.Value));
+                    case BinaryExpression bin:
+                        return $"{GetExpressionString(bin.FirstExpression)} {bin.BinaryExpressionType.ToSqlOperator()} {GetExpressionString(bin.SecondExpression)}";
+                    case Literal lit:
+                        return lit.Value;
+                    case ParenthesisExpression paren:
+                        return $"({GetExpressionString(paren.Expression)})";
+                    default:
+                        return expr.ToString();
+                }
+            }
+        }
+        private void AnalyzeStatements(TSqlFragment fragment, ProcAnalysisResult result,string file)
         {
             var visitor = new TableAndJoinVisitor();
             fragment.Accept(visitor);
@@ -127,11 +235,25 @@ namespace sqlparsergui
             {
                 result.CalledProcedures.Add(calledProc);
             }
-        }
+            foreach (var where in visitor.WhereConditions)
+            {
+                result.WhereConditions.Add(where);
+            }
+            // Build alias map
+            var aliasMap = visitor.GetAliasMap();
 
+            // Collect output fields with expressions
+            var outputVisitor = new OutputFieldsVisitor(aliasMap) { FilePath = file };
+            fragment.Accept(outputVisitor);
+            foreach (var kvp in outputVisitor.OutputFields)
+                result.OutputFields[kvp.Key] = kvp.Value;
+        }
         private class StoredProcedureVisitor : TSqlFragmentVisitor
         {
             public List<StoredProcedureInfo> StoredProcedures { get; } = new();
+
+            public string FilePath { get; set; } = "";
+            public Dictionary<string, FieldLocation> FieldLocations { get; } = new();
 
             public override void Visit(CreateProcedureStatement node)
             {
@@ -141,32 +263,46 @@ namespace sqlparsergui
                     ProcedureName = procedureName,
                     Body = node.StatementList
                 });
+                FieldLocations[procedureName] = new FieldLocation(
+              FilePath,
+              node.StartLine
+          );
             }
         }
         private class TableAndJoinVisitor : TSqlFragmentVisitor
         {
-            public HashSet<string> Tables { get; } = new();
-            public HashSet<string> JoinFields { get; } = new();
-            public HashSet<string> CalledProcedures { get; } = new();
+            public string ProcedureName { get; set; } = string.Empty;
+            public HashSet<string> Tables { get; set; } = new();
+            public HashSet<string> JoinFields { get; set; } = new();
+            public HashSet<string> CalledProcedures { get; set; } = new();
+            public HashSet<string> WhereConditions { get; set; } = new(); // <-- Add this
             private readonly Dictionary<string, string> TableAliases = new();
+            public Dictionary<string, string> GetAliasMap() => new Dictionary<string, string>(TableAliases);
 
             public override void Visit(QuerySpecification node)
             {
                 // First pass: Build table aliases
-                foreach (var table in node.FromClause.TableReferences)
+                if (node.FromClause != null)
                 {
+                    foreach (var table in node.FromClause.TableReferences)
+                    {
+                        BuildTableAlias(table);
+                    }
 
-                    BuildTableAlias(table);
-
-
+                    // Second pass: Process joins and other table references
+                    foreach (var table in node.FromClause.TableReferences)
+                    {
+                        table.Accept(this);
+                    }
                 }
-
-                // Second pass: Process joins and other table references
-                foreach (var table in node.FromClause.TableReferences)
+                if (node.WhereClause != null)
                 {
-                    table.Accept(this);
+                    // NEW: Process WHERE clause for filter conditions
+                    if (node.WhereClause != null)
+                    {
+                        ProcessSearchCondition(node.WhereClause.SearchCondition);
+                    }
                 }
-
                 base.Visit(node);
             }
 
@@ -228,30 +364,59 @@ namespace sqlparsergui
 
                 base.Visit(node);
             }
-
             private void ProcessSearchCondition(BooleanExpression condition)
             {
                 if (condition is BooleanComparisonExpression comparison)
                 {
-                    // Handle simple comparison expressions
-                    if (comparison.FirstExpression is ColumnReferenceExpression left &&
-                        comparison.SecondExpression is ColumnReferenceExpression right)
+                    string op = comparison.ComparisonType switch
                     {
-                        var leftTable = ResolveTableName(left.MultiPartIdentifier);
-                        var rightTable = ResolveTableName(right.MultiPartIdentifier);
+                        BooleanComparisonType.Equals => "=",
+                        BooleanComparisonType.GreaterThan => ">",
+                        BooleanComparisonType.LessThan => "<",
+                        BooleanComparisonType.GreaterThanOrEqualTo => ">=",
+                        BooleanComparisonType.LessThanOrEqualTo => "<=",
+                        BooleanComparisonType.NotEqualToBrackets => "<>",
+                        BooleanComparisonType.NotEqualToExclamation => "!=",
+                        _ => "="
+                    };
 
-                        var leftField = left.MultiPartIdentifier.Identifiers[^1].Value;
-                        var rightField = right.MultiPartIdentifier.Identifiers[^1].Value;
+                    string left = GetExpressionString(comparison.FirstExpression);
+                    string right = GetExpressionString(comparison.SecondExpression);
 
-                        JoinFields.Add($"{leftTable}.{leftField} == {rightTable}.{rightField}");
-
+                    // If both sides are columns, treat as join
+                    if (comparison.FirstExpression is ColumnReferenceExpression && comparison.SecondExpression is ColumnReferenceExpression)
+                    {
+                        JoinFields.Add($"{left} {op} {right}");
+                    }
+                    // If one side is a column and the other is a literal or variable, treat as filter
+                    else if (comparison.FirstExpression is ColumnReferenceExpression && (comparison.SecondExpression is Literal || comparison.SecondExpression is VariableReference))
+                    {
+                        WhereConditions.Add($"{left} {op} {right}");
+                    }
+                    else if (comparison.SecondExpression is ColumnReferenceExpression && (comparison.FirstExpression is Literal || comparison.FirstExpression is VariableReference))
+                    {
+                        WhereConditions.Add($"{right} {op} {left}");
                     }
                 }
                 else if (condition is BooleanBinaryExpression binary)
                 {
-                    // Recursively process left and right conditions in a binary expression
                     ProcessSearchCondition(binary.FirstExpression);
                     ProcessSearchCondition(binary.SecondExpression);
+                }
+            }
+
+            private string GetExpressionString(ScalarExpression expr)
+            {
+                switch (expr)
+                {
+                    case ColumnReferenceExpression col:
+                        return $"{ResolveTableName(col.MultiPartIdentifier)}.{col.MultiPartIdentifier.Identifiers[^1].Value}";
+                    case Literal lit:
+                        return lit.Value is string s && !s.StartsWith("'") ? $"'{lit.Value}'" : lit.Value;
+                    case VariableReference varRef:
+                        return varRef.Name;
+                    default:
+                        return expr.ToString();
                 }
             }
 

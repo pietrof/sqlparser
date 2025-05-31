@@ -14,7 +14,7 @@ BEGIN
         t.Quantity,
         t.Price AS TradePrice,
         lp.ClosePrice AS CurrentPrice,
-        (t.Quantity * lp.ClosePrice) AS MarketValue,
+        (t.Quantity * lp.ClosePrice) AS MarketValue,    
         i.Symbol,
         i.Name,
         t.Trader

@@ -16,6 +16,7 @@ BEGIN
     FROM Trades t
     JOIN Instruments i ON t.InstrumentID = i.InstrumentID
     JOIN Price lp ON t.InstrumentID = lp.InstrumentID AND lp.PriceDate = t.TradeDate
+    
     WHERE lp.OpenPrice IS NOT NULL
     ORDER BY t.TradeDate DESC;
 END;
