@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using Microsoft.SqlServer.Management.SqlParser.Metadata;
 using System.Drawing;
 using System.Diagnostics;
+ 
 
 namespace sqlparsergui
 {
@@ -34,8 +35,8 @@ namespace sqlparsergui
         IEnumerable<ProcAnalysisResult> allProcs;
         private void button1_Click(object sender, EventArgs e)
         {
-            var analyzer = new SqlProcAnalyzer(); 
-            var results = analyzer.AnalyzeDirectory(@"..\..\..\..\sqlparsergui\sql\", LogMessage);
+            var analyzer = new SqlProcAnalyzer();
+            var results = analyzer.AnalyzeDirectory(textBox1.Text, LogMessage);
             analysisResults = results; // Store at class level
                                        // For table fields
 
@@ -100,7 +101,7 @@ namespace sqlparsergui
                     LogMessage(string.Empty);
                 }
             }
-          
+
             // Build the tableFieldsMap
             tableFieldsMap = new Dictionary<string, HashSet<string>>();
             foreach (var res in results)
@@ -715,5 +716,29 @@ namespace sqlparsergui
 
 
         }
-}
+
+        private void textBox1_Click(object sender, EventArgs e)
+        {
+            folderBrowserDialog1.SelectedPath = textBox1.Text;
+            var res = folderBrowserDialog1.ShowDialog();
+            if (res== DialogResult.OK)
+            {
+                textBox1.Text = folderBrowserDialog1.SelectedPath;
+                textBox1_TextChanged(null, null);
+            }
+        }
+
+        private void textBox1_TextChanged(object sender, EventArgs e)
+        {
+            // Save textbox text to settings
+            Properties.Settings.Default.TextBox1Value = textBox1.Text;
+            Properties.Settings.Default.Save();
+        }
+
+        private void Form1_Load(object sender, EventArgs e)
+        {
+            textBox1.Text = Properties.Settings.Default.TextBox1Value;
+
+        }
+    }
 }
